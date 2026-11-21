@@ -1,0 +1,233 @@
+{
+  "info": {
+    "name": "Auth Starter API",
+    "description": "Koleksi endpoint untuk project-stater-backend.\n\nCara pakai:\n1. Ubah collection variable `email` dan `password` ke user yang ada di database.\n2. Jalankan `Login` dulu. Cookie `access_token` dan `refresh_token` otomatis disimpan Postman.\n3. Header `X-Requested-With` sudah dipasang di level collection (wajib untuk lolos `requireCsrfHeader`).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:2000" },
+    { "key": "email", "value": "admin@example.com" },
+    { "key": "password", "value": "ganti-password-ini" },
+    { "key": "newPassword", "value": "password-baru-minimal-12" },
+    { "key": "currentRefreshToken", "value": "" },
+    { "key": "previousRefreshToken", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.request.headers.upsert({ key: 'X-Requested-With', value: 'XMLHttpRequest' });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('db up', () => pm.expect(pm.response.json().db).to.eql('up'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('access_token cookie diset', () => pm.expect(pm.cookies.has('access_token')).to.be.true);",
+                  "pm.test('refresh_token cookie diset', () => pm.expect(pm.cookies.has('refresh_token')).to.be.true);",
+                  "",
+                  "if (pm.cookies.has('refresh_token')) {",
+                  "  pm.collectionVariables.set('previousRefreshToken', '');",
+                  "  pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/refresh"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));",
+                  "",
+                  "if (pm.cookies.has('refresh_token')) {",
+                  "  // Simpan token lama untuk uji 'Refresh - Reuse Token Lama'",
+                  "  pm.collectionVariables.set('previousRefreshToken', pm.collectionVariables.get('currentRefreshToken'));",
+                  "  pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
+                  "  pm.test('refresh token berganti (rotation)', () => {",
+                  "    pm.expect(pm.collectionVariables.get('currentRefreshToken')).to.not.eql(pm.collectionVariables.get('previousRefreshToken'));",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh - Reuse Token Lama (uji pencurian)",
+          "protocolProfileBehavior": { "disableCookies": true },
+          "request": {
+            "description": "Mengirim refresh token yang SUDAH dipakai (diambil dari variable previousRefreshToken).\n\nLangkah: Login -> Refresh -> tunggu > 10 detik -> jalankan request ini.\nHasil yang benar: 401, dan semua token dengan familyId yang sama ter-revoke. Setelah ini, request Refresh biasa juga harus 401 (sesi sudah dimatikan).\n\nCookie jar dimatikan untuk request ini supaya Postman tidak ikut mengirim cookie terbaru.",
+            "method": "POST",
+            "header": [
+              { "key": "Cookie", "value": "refresh_token={{previousRefreshToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/refresh"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('previousRefreshToken')) {",
+                  "  console.warn('previousRefreshToken kosong: jalankan Login lalu Refresh dulu.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401 (reuse terdeteksi)', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/auth/change-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  // Tukar supaya Login berikutnya memakai password baru",
+                  "  const oldPw = pm.collectionVariables.get('password');",
+                  "  pm.collectionVariables.set('password', pm.collectionVariables.get('newPassword'));",
+                  "  pm.collectionVariables.set('newPassword', oldPw);",
+                  "  if (pm.cookies.has('refresh_token')) {",
+                  "    pm.collectionVariables.set('previousRefreshToken', '');",
+                  "    pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout All Devices",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/logout-all"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

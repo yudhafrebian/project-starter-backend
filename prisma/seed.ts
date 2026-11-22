@@ -3,13 +3,6 @@ import { prisma } from "../src/config/prisma";
 import { hashPassword } from "../src/lib/hash-password";
 import { Role } from "../src/generated/prisma/enums";
 
-// Jalankan: npm run db:seed
-// Otomatis juga dijalankan oleh `prisma migrate reset` (lihat prisma.config.ts).
-//
-// Aman dijalankan berkali-kali (idempotent):
-// - user belum ada  -> dibuat sebagai SUPER_ADMIN
-// - user sudah ada  -> role dipastikan SUPER_ADMIN & aktif, password TIDAK ditimpa
-
 const seedEnv = z
   .object({
     SEED_SUPERADMIN_EMAIL: z.string().trim().toLowerCase().pipe(z.email()),

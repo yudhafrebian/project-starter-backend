@@ -14,15 +14,19 @@ const schema = z.object({
   JWT_SECRET: z
     .string()
     .min(32, "JWT_SECRET must be at least 32 characters long"),
-  // Jumlah proxy di depan app (Express "trust proxy"), supaya req.ip = IP user asli untuk
-  // rate limit login. Vercel: 1 (edge Vercel mengisi X-Forwarded-For). 0 = tanpa proxy (lokal).
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
-  GOOGLE_CLIENT_ID: z
-    .string()
-    .min(32, "GOOGLE_CLIENT_ID must be at least 32 characters long"),
-  GOOGLE_CLIENT_SECRET: z
-    .string()
-    .min(32, "GOOGLE_CLIENT_SECRET must be at least 32 characters long"),
+  GOOGLE_CLIENT_ID: z.string().min(1),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  APP_NAME: z.string().min(1).default("Vlairwitch App"),
+  SMTP_HOST: z.string().min(1),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  SMTP_USER: z.string().min(1),
+  SMTP_PASS: z.string().min(1),
+  MAIL_FROM: z.string().min(1),
 });
 
 const parsed = schema.safeParse(process.env);

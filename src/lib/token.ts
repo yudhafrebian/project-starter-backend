@@ -4,10 +4,9 @@ import { env } from "../config/env";
 
 export const ACCESS_COOKIE = "access_token";
 export const REFRESH_COOKIE = "refresh_token";
-export const ACCESS_TTL_SECONDS = 15 * 60; // 15 menit
-export const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 hari
+export const ACCESS_TTL_SECONDS = 15 * 60;
+export const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
 
-// ---- Access token (JWT) ----
 export const signAccessToken = (userId: string): string =>
   jwt.sign({}, env.JWT_SECRET, {
     subject: userId,
@@ -28,16 +27,14 @@ export const verifyAccessToken = (token: string): string | null => {
   }
 };
 
-// ---- Refresh token (string acak) ----
 export const generateRefreshToken = () =>
   crypto.randomBytes(32).toString("base64url");
 
-// SHA-256 cukup (bukan bcrypt): token sudah acak 256-bit, tidak bisa ditebak,
-// dan kita perlu mencarinya di DB berdasarkan hash.
+export const generateRandomToken = () => crypto.randomBytes(32).toString("base64url");
+
 export const hashToken = (token: string) =>
   crypto.createHash("sha256").update(token).digest("hex");
 
-// ---- Cookie ----
 const baseCookie = {
   httpOnly: true,
   secure: env.NODE_ENV === "production",
@@ -45,5 +42,4 @@ const baseCookie = {
 };
 
 export const accessCookieOptions = { ...baseCookie, path: "/" };
-// Refresh token hanya dikirim browser ke endpoint auth, tidak ikut ke setiap request.
 export const refreshCookieOptions = { ...baseCookie, path: "/api/v1/auth" };

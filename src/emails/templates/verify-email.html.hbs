@@ -1,0 +1,14 @@
+{{#> layout}}
+<p>Halo {{name}},</p>
+<p>Terima kasih sudah mendaftar. Klik tombol di bawah untuk memverifikasi email kamu. Link berlaku {{expiresInHours}} jam.</p>
+<p style="text-align:center;margin:32px 0;">
+  <a href="{{link}}" style="display:inline-block;background:#18181b;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:bold;">
+    Verifikasi Email
+  </a>
+</p>
+<p style="font-size:13px;color:#71717a;">
+  Kalau tombol tidak berfungsi, salin link ini ke browser:<br>
+  <a href="{{link}}" style="color:#2563eb;word-break:break-all;">{{link}}</a>
+</p>
+<p style="font-size:13px;color:#71717a;">Abaikan email ini jika kamu tidak merasa mendaftar.</p>
+{{/layout}}

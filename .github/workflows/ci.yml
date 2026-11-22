@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck, test & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: starter_db_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d starter_db_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/starter_db_test?schema=public
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create .env.test
+        run: |
+          cat > .env.test <<'EOF'
+          NODE_ENV=test
+          PORT=4001
+          APP_NAME="Starter CI"
+          WEB_ORIGIN=http://localhost:3000
+          TRUST_PROXY=0
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/starter_db_test?schema=public"
+          JWT_SECRET=ci-secret-yang-panjangnya-minimal-tiga-puluh-dua-karakter
+          GOOGLE_CLIENT_ID=ci-google-client-id.apps.googleusercontent.com
+          SMTP_HOST=localhost
+          SMTP_PORT=587
+          SMTP_SECURE=false
+          SMTP_USER=test
+          SMTP_PASS=test
+          MAIL_FROM="Starter CI <no-reply@test.local>"
+          EOF
+
+      - name: Typecheck (app)
+        run: npm run typecheck
+
+      - name: Typecheck (tests)
+        run: npx tsc --noEmit -p tsconfig.test.json
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify email templates in dist
+        run: test -f dist/emails/templates/layout.html.hbs

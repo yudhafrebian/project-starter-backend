@@ -1,16 +1,78 @@
 {
   "info": {
     "name": "Auth Starter API",
-    "description": "Koleksi endpoint untuk project-stater-backend.\n\nCara pakai:\n1. Ubah collection variable `email` dan `password` ke user yang ada di database.\n2. Jalankan `Login` dulu. Cookie `access_token` dan `refresh_token` otomatis disimpan Postman.\n3. Header `X-Requested-With` sudah dipasang di level collection (wajib untuk lolos `requireCsrfHeader`).",
+    "description": "Koleksi endpoint project-starter-backend. Dokumentasi lengkap: doc/15-testing.md#postman dan doc/10-referensi-api.md.\n\nCara pakai:\n1. Tab Variables: sesuaikan `baseUrl` dengan PORT server, isi `email`/`password` (akun terverifikasi, mis. super admin dari seed) dan `registerEmail` (email asli yang inbox-nya bisa dibuka).\n2. Header `X-Requested-With` dipasang otomatis untuk semua request (wajib untuk lolos proteksi CSRF).\n3. Cookie `access_token` & `refresh_token` disimpan otomatis oleh Postman setelah login.\n\nLogin di folder mana pun mengganti sesi aktif di cookie Postman. Folder Admin butuh login sebagai SUPER_ADMIN (request 'Login sebagai Admin' di folder itu).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:2000" },
-    { "key": "email", "value": "admin@example.com" },
-    { "key": "password", "value": "ganti-password-ini" },
-    { "key": "newPassword", "value": "password-baru-minimal-12" },
-    { "key": "currentRefreshToken", "value": "" },
-    { "key": "previousRefreshToken", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "email",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "password",
+      "value": "ganti-password-ini"
+    },
+    {
+      "key": "newPassword",
+      "value": "password-baru-minimal-12"
+    },
+    {
+      "key": "registerName",
+      "value": "User Tes"
+    },
+    {
+      "key": "registerEmail",
+      "value": "email-asli-kamu@gmail.com"
+    },
+    {
+      "key": "registerPassword",
+      "value": "password-tes-12345"
+    },
+    {
+      "key": "verificationToken",
+      "value": ""
+    },
+    {
+      "key": "resetToken",
+      "value": ""
+    },
+    {
+      "key": "resetNewPassword",
+      "value": "password-reset-12345"
+    },
+    {
+      "key": "googleIdToken",
+      "value": ""
+    },
+    {
+      "key": "profileName",
+      "value": "Nama Baru"
+    },
+    {
+      "key": "avatarUrl",
+      "value": "https://example.com/avatar.png"
+    },
+    {
+      "key": "adminSearch",
+      "value": ""
+    },
+    {
+      "key": "targetUserId",
+      "value": ""
+    },
+    {
+      "key": "currentRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "previousRefreshToken",
+      "value": ""
+    }
   ],
   "event": [
     {
@@ -28,7 +90,8 @@
       "name": "Health",
       "request": {
         "method": "GET",
-        "url": "{{baseUrl}}/api/health"
+        "url": "{{baseUrl}}/api/health",
+        "description": "Cek server dan koneksi database. Di luar /api/v1, tidak butuh header CSRF."
       },
       "event": [
         {
@@ -44,18 +107,186 @@
       ]
     },
     {
-      "name": "Auth",
+      "name": "Register & Verifikasi",
+      "description": "Urutan: Register → Login (Belum Verifikasi) → tempel link dari email ke `verificationToken` → Verify Email → Login (Akun Baru).",
       "item": [
         {
-          "name": "Login",
+          "name": "Register",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/auth/login",
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "description": "Selalu 202 dengan body yang sama (anti user enumeration). Cek inbox `registerEmail`.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "raw": "{\n  \"name\": \"{{registerName}}\",\n  \"email\": \"{{registerEmail}}\",\n  \"password\": \"{{registerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "pm.test('code registration_received', () => pm.expect(pm.response.json().code).to.eql('registration_received'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (Belum Verifikasi)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "Akun baru yang belum klik link verifikasi. Harus 403 email_not_verified.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{registerEmail}}\",\n  \"password\": \"{{registerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error email_not_verified', () => pm.expect(pm.response.json().error.code).to.eql('email_not_verified'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/verify-email",
+            "description": "Isi `verificationToken` dengan link dari email (boleh seluruh URL). Pertama: 200. Token yang sama lagi: 400.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verificationToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.collectionVariables.get('verificationToken');",
+                  "if (!t) console.warn('verificationToken kosong: tempel link dari email ke collection variable.');",
+                  "if (t && t.includes('token=')) {",
+                  "  pm.collectionVariables.set('verificationToken', decodeURIComponent(t.split('token=')[1].split('&')[0]));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 atau 400 (token sudah dipakai)', () => pm.expect(pm.response.code).to.be.oneOf([200, 400]));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('code email_verified', () => pm.expect(pm.response.json().code).to.eql('email_verified'));",
+                  "} else {",
+                  "  pm.test('error invalid_verification_token', () => pm.expect(pm.response.json().error.code).to.eql('invalid_verification_token'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend Verification",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/resend-verification",
+            "description": "Selalu 202. Email hanya terkirim jika akun ada, aktif, belum terverifikasi, dan lewat 60 detik dari kiriman terakhir. Link sebelumnya otomatis tidak berlaku.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{registerEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "pm.test('code verification_sent', () => pm.expect(pm.response.json().code).to.eql('verification_sent'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (Akun Baru)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "Login akun hasil register setelah diverifikasi. Harus 200.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{registerEmail}}\",\n  \"password\": \"{{registerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "event": [
@@ -65,9 +296,52 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('code login_success', () => pm.expect(pm.response.json().code).to.eql('login_success'));",
+                  "if (pm.cookies.has('refresh_token')) {",
+                  "  pm.collectionVariables.set('previousRefreshToken', '');",
+                  "  pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sesi",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('code login_success', () => pm.expect(pm.response.json().code).to.eql('login_success'));",
                   "pm.test('access_token cookie diset', () => pm.expect(pm.cookies.has('access_token')).to.be.true);",
                   "pm.test('refresh_token cookie diset', () => pm.expect(pm.cookies.has('refresh_token')).to.be.true);",
-                  "",
                   "if (pm.cookies.has('refresh_token')) {",
                   "  pm.collectionVariables.set('previousRefreshToken', '');",
                   "  pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
@@ -81,7 +355,8 @@
           "name": "Me",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/auth/me"
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "description": "Profil lengkap: emailVerified, hasPassword, providers. Tidak pernah berisi passwordHash."
           },
           "event": [
             {
@@ -89,7 +364,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('tanpa passwordHash', () => pm.expect(pm.response.text()).to.not.include('passwordHash'));"
                 ]
               }
             }
@@ -99,7 +375,8 @@
           "name": "Refresh",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/auth/refresh"
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "description": "Rotation: refresh token berganti setiap dipakai."
           },
           "event": [
             {
@@ -108,9 +385,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 204', () => pm.response.to.have.status(204));",
-                  "",
                   "if (pm.cookies.has('refresh_token')) {",
-                  "  // Simpan token lama untuk uji 'Refresh - Reuse Token Lama'",
                   "  pm.collectionVariables.set('previousRefreshToken', pm.collectionVariables.get('currentRefreshToken'));",
                   "  pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
                   "  pm.test('refresh token berganti (rotation)', () => {",
@@ -124,14 +399,16 @@
         },
         {
           "name": "Refresh - Reuse Token Lama (uji pencurian)",
-          "protocolProfileBehavior": { "disableCookies": true },
           "request": {
-            "description": "Mengirim refresh token yang SUDAH dipakai (diambil dari variable previousRefreshToken).\n\nLangkah: Login -> Refresh -> tunggu > 10 detik -> jalankan request ini.\nHasil yang benar: 401, dan semua token dengan familyId yang sama ter-revoke. Setelah ini, request Refresh biasa juga harus 401 (sesi sudah dimatikan).\n\nCookie jar dimatikan untuk request ini supaya Postman tidak ikut mengirim cookie terbaru.",
             "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "description": "Mengirim refresh token yang SUDAH dipakai (variable previousRefreshToken).\n\nLangkah: Login → Refresh → tunggu > 10 detik → jalankan request ini. Hasil benar: 401, dan seluruh sesi dicabut (Refresh biasa setelahnya juga 401).\n\nCookie jar dimatikan supaya yang terkirim benar-benar token lama.",
             "header": [
-              { "key": "Cookie", "value": "refresh_token={{previousRefreshToken}}" }
-            ],
-            "url": "{{baseUrl}}/api/v1/auth/refresh"
+              {
+                "key": "Cookie",
+                "value": "refresh_token={{previousRefreshToken}}"
+              }
+            ]
           },
           "event": [
             {
@@ -150,52 +427,22 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status 401 (reuse terdeteksi)', () => pm.response.to.have.status(401));"
+                  "pm.test('status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error invalid_session', () => pm.expect(pm.response.json().error.code).to.eql('invalid_session'));"
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "Change Password",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/auth/change-password",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "",
-                  "if (pm.response.code === 200) {",
-                  "  // Tukar supaya Login berikutnya memakai password baru",
-                  "  const oldPw = pm.collectionVariables.get('password');",
-                  "  pm.collectionVariables.set('password', pm.collectionVariables.get('newPassword'));",
-                  "  pm.collectionVariables.set('newPassword', oldPw);",
-                  "  if (pm.cookies.has('refresh_token')) {",
-                  "    pm.collectionVariables.set('previousRefreshToken', '');",
-                  "    pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
-                  "  }",
-                  "}"
-                ]
-              }
-            }
-          ]
+          ],
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          }
         },
         {
           "name": "Logout",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/auth/logout"
+            "url": "{{baseUrl}}/api/v1/auth/logout",
+            "description": "Mencabut sesi perangkat ini. Tidak butuh access token, selalu 204."
           },
           "event": [
             {
@@ -213,7 +460,8 @@
           "name": "Logout All Devices",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/auth/logout-all"
+            "url": "{{baseUrl}}/api/v1/auth/logout-all",
+            "description": "Mencabut sesi di semua perangkat. Butuh login."
           },
           "event": [
             {
@@ -222,6 +470,625 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Login Google",
+      "description": "Cara mendapatkan id_token tanpa frontend (Google OAuth Playground):\n\n1. Di Google Cloud Console, tambahkan `https://developers.google.com/oauthplayground` ke Authorized redirect URIs OAuth Client.\n2. Buka https://developers.google.com/oauthplayground, ikon gear → 'Use your own OAuth credentials', isi Client ID & Secret.\n3. Step 1: ketik `openid email profile`, Authorize APIs, login Google.\n4. Step 2: 'Exchange authorization code for tokens', salin `id_token` (diawali eyJ...).\n5. Tempel ke collection variable `googleIdToken`. Berlaku 1 jam.",
+      "item": [
+        {
+          "name": "Login Google",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/google",
+            "description": "Akun Google baru → user dibuat. Pernah login → dikenali lewat sub. Email sudah terdaftar → akun ditautkan (password dihapus jika user belum terverifikasi). Respons sama dengan /login.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"credential\": \"{{googleIdToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.collectionVariables.get('googleIdToken');",
+                  "if (!t) {",
+                  "  console.warn('googleIdToken kosong: ambil id_token dari OAuth Playground (lihat deskripsi folder).');",
+                  "} else {",
+                  "  try {",
+                  "    const payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));",
+                  "    const sisa = payload.exp - Math.floor(Date.now() / 1000);",
+                  "    if (sisa <= 0) console.warn('googleIdToken sudah kedaluwarsa: ambil ulang dari OAuth Playground.');",
+                  "    else console.log('googleIdToken untuk ' + payload.email + ', sisa ' + Math.floor(sisa / 60) + ' menit');",
+                  "  } catch (e) { console.warn('googleIdToken bukan JWT yang valid'); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('code login_success', () => pm.expect(pm.response.json().code).to.eql('login_success'));",
+                  "  if (pm.cookies.has('refresh_token')) {",
+                  "    pm.collectionVariables.set('previousRefreshToken', '');",
+                  "    pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Google - Token Palsu",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/google",
+            "description": "id_token dengan signature palsu. Harus 401 invalid_google_token.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"credential\": \"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjMiLCJlbWFpbCI6InBhbHN1QGdtYWlsLmNvbSJ9.tanda-tangan-palsu\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error invalid_google_token', () => pm.expect(pm.response.json().error.code).to.eql('invalid_google_token'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lupa Password",
+      "description": "Urutan: Forgot Password → tempel link dari email ke `resetToken` → Reset Password. Memakai `registerEmail` supaya akun admin tidak ikut ter-reset.",
+      "item": [
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/forgot-password",
+            "description": "Selalu 202 dengan body yang sama. Email reset hanya terkirim jika akun ada, aktif, dan lewat 60 detik dari permintaan terakhir.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{registerEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "pm.test('code reset_email_sent', () => pm.expect(pm.response.json().code).to.eql('reset_email_sent'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/reset-password",
+            "description": "Pertama: 200, semua sesi user dicabut, email 'password diganti' terkirim. Token yang sama lagi: 400.\n\nSetelah 200, `registerPassword` otomatis diganti ke password baru.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{resetNewPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.collectionVariables.get('resetToken');",
+                  "if (!t) console.warn('resetToken kosong: tempel link dari email ke collection variable.');",
+                  "if (t && t.includes('token=')) {",
+                  "  pm.collectionVariables.set('resetToken', decodeURIComponent(t.split('token=')[1].split('&')[0]));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 atau 400 (token sudah dipakai)', () => pm.expect(pm.response.code).to.be.oneOf([200, 400]));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('code password_reset', () => pm.expect(pm.response.json().code).to.eql('password_reset'));",
+                  "  const oldPw = pm.collectionVariables.get('registerPassword');",
+                  "  pm.collectionVariables.set('registerPassword', pm.collectionVariables.get('resetNewPassword'));",
+                  "  pm.collectionVariables.set('resetNewPassword', oldPw);",
+                  "} else {",
+                  "  pm.test('error invalid_reset_token', () => pm.expect(pm.response.json().error.code).to.eql('invalid_reset_token'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Akun & Profil",
+      "description": "Butuh login (request Login di folder Sesi).",
+      "item": [
+        {
+          "name": "Update Profil - Nama",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "description": "Hanya field yang dikirim yang berubah. Respons = profil terbaru (bentuk sama dengan GET /me).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{profileName}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('nama berubah', () => pm.expect(pm.response.json().data.name).to.eql(pm.collectionVariables.get('profileName')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Profil - Avatar",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "description": "avatarUrl wajib https (maks. 2048 karakter).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"avatarUrl\": \"{{avatarUrl}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('avatar berubah', () => pm.expect(pm.response.json().data.avatarUrl).to.eql(pm.collectionVariables.get('avatarUrl')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Profil - Hapus Avatar",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "description": "avatarUrl: null menghapus avatar.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"avatarUrl\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('avatar dihapus', () => pm.expect(pm.response.json().data.avatarUrl).to.be.null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Profil - Avatar Tidak Aman (ditolak)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "description": "URL selain https (javascript:, data:, http) ditolak. Harus 400.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"avatarUrl\": \"javascript:alert(1)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error validation_failed', () => pm.expect(pm.response.json().error.code).to.eql('validation_failed'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/change-password",
+            "description": "Memakai akun `email`/`password`. Perangkat ini tetap login (cookie baru), perangkat lain ter-logout. Setelah 200, `password` dan `newPassword` otomatis ditukar.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const oldPw = pm.collectionVariables.get('password');",
+                  "  pm.collectionVariables.set('password', pm.collectionVariables.get('newPassword'));",
+                  "  pm.collectionVariables.set('newPassword', oldPw);",
+                  "  if (pm.cookies.has('refresh_token')) {",
+                  "    pm.collectionVariables.set('previousRefreshToken', '');",
+                  "    pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Hanya SUPER_ADMIN. Urutan: Login sebagai Admin → List Users (menyimpan id user non-admin pertama ke `targetUserId`) → Nonaktifkan → Aktifkan.\n\nAkun `email`/`password` harus ber-role SUPER_ADMIN (mis. hasil `npm run db:seed`).",
+      "item": [
+        {
+          "name": "Login sebagai Admin",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('role SUPER_ADMIN', () => pm.expect(pm.response.json().data.role).to.eql('SUPER_ADMIN'));",
+                  "if (pm.cookies.has('refresh_token')) {",
+                  "  pm.collectionVariables.set('previousRefreshToken', '');",
+                  "  pm.collectionVariables.set('currentRefreshToken', pm.cookies.get('refresh_token'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users?page=1&pageSize=20&search={{adminSearch}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "{{adminSearch}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Query: page (≥1, default 1), pageSize (1–100, default 20), search (email atau nama, opsional). Kosongkan `adminSearch` untuk semua user.\n\nId user pertama yang bukan SUPER_ADMIN disimpan ke `targetUserId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('ada meta pagination', () => pm.expect(body.meta).to.have.keys('page', 'pageSize', 'total', 'totalPages'));",
+                  "pm.test('tanpa passwordHash', () => pm.expect(pm.response.text()).to.not.include('passwordHash'));",
+                  "const target = (body.data || []).find((u) => u.role !== 'SUPER_ADMIN');",
+                  "if (target) {",
+                  "  pm.collectionVariables.set('targetUserId', target.id);",
+                  "  console.log('targetUserId = ' + target.id + ' (' + target.email + ')');",
+                  "} else {",
+                  "  console.warn('Tidak ada user non-admin. Register user dulu.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Users - Tanpa Akses (user biasa)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/admin/users",
+            "description": "Jalankan setelah login sebagai user biasa (mis. 'Login (Akun Baru)'). Harus 403 forbidden."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error forbidden', () => pm.expect(pm.response.json().error.code).to.eql('forbidden'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nonaktifkan User",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/admin/users/{{targetUserId}}/status",
+            "description": "Menonaktifkan `targetUserId` dan mencabut semua sesinya. Tidak bisa untuk diri sendiri (400) atau SUPER_ADMIN lain (403).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('targetUserId')) console.warn('targetUserId kosong: jalankan List Users dulu.');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('active false', () => pm.expect(pm.response.json().data.active).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aktifkan User",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/admin/users/{{targetUserId}}/status",
+            "description": "Mengaktifkan kembali `targetUserId`. Sesi lama tidak kembali; user harus login ulang.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('active true', () => pm.expect(pm.response.json().data.active).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Status - ID Tidak Valid",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/admin/users/bukan-uuid/status",
+            "description": "Id bukan UUID → 400 validation_failed (bukan 500).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error validation_failed', () => pm.expect(pm.response.json().error.code).to.eql('validation_failed'));"
                 ]
               }
             }

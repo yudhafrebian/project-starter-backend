@@ -4,7 +4,6 @@ import { logger } from "../lib/logger";
 import { Prisma } from "../generated/prisma/client";
 import z from "zod";
 
-// Error dari body-parser (JSON rusak, body terlalu besar) membawa status 4xx.
 const clientErrorStatus = (err: unknown): number | undefined => {
   if (typeof err !== "object" || err === null) return undefined;
   const status = (err as { status?: unknown; statusCode?: unknown }).status ??

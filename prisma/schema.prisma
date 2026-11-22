@@ -18,9 +18,10 @@ model User {
   active          Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  role            Role      @default(GUEST)
+  role            Role      @default(USER)
   refreshTokens RefreshToken[]
   oauthAccounts OAuthAccount[]
+  verificationTokens VerificationToken[]
 }
 
 model OAuthAccount {
@@ -53,11 +54,30 @@ model RefreshToken {
   @@index([userId])
   @@index([familyId])
 }
+
+model VerificationToken {
+  id        String                @id @default(cuid())
+  type      VerificationTokenType
+  tokenHash String                @unique
+  userId    String                @db.Uuid
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime              @default(now())
+
+  @@index([userId, type])
+}
+
 enum Role {
     SUPER_ADMIN
-    GUEST
+    USER
 }
 
 enum OAuthProvider {
   GOOGLE
+}
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
 }

@@ -2,10 +2,15 @@ import { app } from "./app";
 import { env } from "./config/env";
 import { prisma } from "./config/prisma";
 import { logger } from "./lib/logger";
+import { verifyMailer } from "./lib/mailer";
 
 const server = app.listen(env.PORT, () => {
   logger.info(`project starter running on port ${env.PORT}`);
 });
+
+verifyMailer()
+  .then(() => logger.info("SMTP ready"))
+  .catch((err) => logger.warn({ err }, "SMTP not reachable"));
 
 async function shutdown(signal: string) {
   logger.info(`${signal} received, shutting down...`);

@@ -1,8 +1,6 @@
 import { compare, genSalt, hash } from "bcryptjs";
 
-// Cost yang sama dipakai untuk semua hash (termasuk dummy di auth.service),
-// supaya waktu respons login tidak membocorkan apakah email ada.
-export const BCRYPT_COST = 12;
+export const BCRYPT_COST = process.env.NODE_ENV === "test" ? 4 : 12;
 
 export const hashPassword = async (password: string) => {
   const salt = await genSalt(BCRYPT_COST);
